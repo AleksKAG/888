@@ -1,3 +1,17 @@
+package main
+
+import (
+	"database/sql"
+)
+
+type ParcelStore struct {
+	db *sql.DB
+}
+
+func NewParcelStore(db *sql.DB) ParcelStore {
+	return ParcelStore{db: db}
+}
+
 func (s ParcelStore) Add(p Parcel) (int, error) {
 	query := `INSERT INTO parcel (client, status, address, created_at) VALUES (?, ?, ?, ?)`
 	result, err := s.db.Exec(query, p.Client, p.Status, p.Address, p.CreatedAt)
