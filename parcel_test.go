@@ -1,40 +1,10 @@
-package main
-
-import (
-	"database/sql"
-	"testing"
-	"time"
-
-	"github.com/stretchr/testify/require"
-	_ "modernc.org/sqlite"
-)
-
-func setupDB(t *testing.T) *sql.DB {
-	db, err := sql.Open("sqlite", ":memory:")
-	require.NoError(t, err)
-
-	_, err = db.Exec(`
-		CREATE TABLE parcel (
-			number INTEGER PRIMARY KEY AUTOINCREMENT,
-			client INTEGER,
-			status TEXT,
-			address TEXT,
-			created_at TEXT
-		)
-	`)
-	require.NoError(t, err)
-	return db
-}
-
 func TestAddGetDelete(t *testing.T) {
-	db := setupDB(t)
+	db, err := sql.Open("sqlite", "tracker.db")
+	require.NoError(t, err)
+	defer db.Close()
+
 	store := NewParcelStore(db)
-	parcel := Parcel{
-		Client:    1,
-		Status:    ParcelStatusRegistered,
-		Address:   "123 Test Street",
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
-	}
+	parcel := getTestParcel()
 
 	// Add
 	id, err := store.Add(parcel)
@@ -45,12 +15,26 @@ func TestAddGetDelete(t *testing.T) {
 	storedParcel, err := store.Get(id)
 	require.NoError(t, err)
 	require.Equal(t, parcel.Client, storedParcel.Client)
+	require.Equal(t, parcel.Status, storedParcel.Status)
+	require.Equal(t, parcel.Address, storedParcel.Address)
 
 	// Delete
 	err = store.Delete(id)
 	require.NoError(t, err)
 
-	// Verify Deletion
+	// Verify deletion
 	_, err = store.Get(id)
 	require.Error(t, err)
+}
+
+func TestSetAddress(t *testing.T) {
+	// аналогично TestAddGetDelete, только с изменением адреса
+}
+
+func TestSetStatus(t *testing.T) {
+	// аналогично TestAddGetDelete, только с изменением статуса
+}
+
+func TestGetByClient(t *testing.T) {
+	// аналогично TestAddGetDelete, только с добавлением нескольких посылок одного клиента
 }
