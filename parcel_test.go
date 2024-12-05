@@ -2,23 +2,20 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"math/rand"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 var (
-	// randSource источник псевдо случайных чисел.
-	// Для повышения уникальности в качестве seed
-	// используется текущее время в unix формате (в виде числа)
 	randSource = rand.NewSource(time.Now().UnixNano())
-	// randRange использует randSource для генерации случайных чисел
-	randRange = rand.New(randSource)
+	randRange  = rand.New(randSource)
 )
 
-// getTestParcel возвращает тестовую посылку
 func getTestParcel() Parcel {
 	return Parcel{
 		Client:    1000,
@@ -28,125 +25,100 @@ func getTestParcel() Parcel {
 	}
 }
 
-// TestAddGetDelete проверяет добавление, получение и удаление посылки
 func TestAddGetDelete(t *testing.T) {
-	// prepare
-	db, err := sql.Open("sqlite", ":memory:")
+	db, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
 	defer db.Close()
 
 	store := NewParcelStore(db)
 	parcel := getTestParcel()
 
-	// add
 	id, err := store.Add(parcel)
-	require.NoError(t, err)
-	require.NotZero(t, id)
+	assert.NoError(t, err)
+	assert.NotZero(t, id)
 
-	// get
 	storedParcel, err := store.Get(id)
-	require.NoError(t, err)
-	require.Equal(t, parcel.Client, storedParcel.Client)
-	require.Equal(t, parcel.Status, storedParcel.Status)
-	require.Equal(t, parcel.Address, storedParcel.Address)
+	assert.NoError(t, err)
+	assert.Equal(t, parcel.Client, storedParcel.Client)
+	assert.Equal(t, parcel.Status, storedParcel.Status)
+	assert.Equal(t, parcel.Address, storedParcel.Address)
 
-	// delete
 	err = store.Delete(id)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	_, err = store.Get(id)
-	require.Error(t, err)
+	assert.ErrorIs(t, err, sql.ErrNoRows)
 }
 
-// TestSetAddress проверяет обновление адреса
 func TestSetAddress(t *testing.T) {
-	// prepare
-	db, err := sql.Open("sqlite", ":memory:")
+	db, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
 	defer db.Close()
 
 	store := NewParcelStore(db)
 	parcel := getTestParcel()
 
-	// add
 	id, err := store.Add(parcel)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
-	// set address
 	newAddress := "new test address"
 	err = store.SetAddress(id, newAddress)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
-	// check
 	updatedParcel, err := store.Get(id)
-	require.NoError(t, err)
-	require.Equal(t, newAddress, updatedParcel.Address)
+	assert.NoError(t, err)
+	assert.Equal(t, newAddress, updatedParcel.Address)
 }
 
-// TestSetStatus проверяет обновление статуса
 func TestSetStatus(t *testing.T) {
-	// prepare
-	db, err := sql.Open("sqlite", ":memory:")
+	db, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
 	defer db.Close()
 
 	store := NewParcelStore(db)
 	parcel := getTestParcel()
 
-	// add
 	id, err := store.Add(parcel)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
-	// set status
 	err = store.SetStatus(id, ParcelStatusSent)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
-	// check
 	updatedParcel, err := store.Get(id)
-	require.NoError(t, err)
-	require.Equal(t, ParcelStatusSent, updatedParcel.Status)
+	assert.NoError(t, err)
+	assert.Equal(t, ParcelStatusSent, updatedParcel.Status)
 }
 
-// TestGetByClient проверяет получение посылок по идентификатору клиента
 func TestGetByClient(t *testing.T) {
-	// prepare
-	db, err := sql.Open("sqlite", ":memory:")
+	db, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
 	defer db.Close()
 
 	store := NewParcelStore(db)
-	
+
 	parcels := []Parcel{
 		getTestParcel(),
 		getTestParcel(),
 		getTestParcel(),
 	}
-	parcelMap := map[int]Parcel{}
-
-	// задаём всем посылкам один и тот же идентификатор клиента
 	client := randRange.Intn(10_000_000)
-	parcels[0].Client = client
-	parcels[1].Client = client
-	parcels[2].Client = client
-
-	// add
-	for i := 0; i < len(parcels); i++ {
-		id, err := store.Add(parcels[i])
-		require.NoError(t, err)
-		parcels[i].Number = id
-		parcelMap[id] = parcels[i]
+	for i := range parcels {
+		parcels[i].Client = client
 	}
 
-	// get by client
-	storedParcels, err := store.GetByClient(client)
-	require.NoError(t, err)
-	require.Equal(t, len(parcels), len(storedParcels))
+	for _, parcel := range parcels {
+		id, err := store.Add(parcel)
+		assert.NoError(t, err)
+		parcel.Number = id
+	}
 
-	// check
-	for _, parcel := range storedParcels {
-		expectedParcel := parcelMap[parcel.Number]
-		require.Equal(t, expectedParcel.Client, parcel.Client)
-		require.Equal(t, expectedParcel.Status, parcel.Status)
-		require.Equal(t, expectedParcel.Address, parcel.Address)
+	storedParcels, err := store.GetByClient(client)
+	assert.NoError(t, err)
+	assert.Len(t, storedParcels, len(parcels))
+
+	for i, storedParcel := range storedParcels {
+		assert.Equal(t, parcels[i].Client, storedParcel.Client)
+		assert.Equal(t, parcels[i].Address, storedParcel.Address)
+		assert.Equal(t, parcels[i].Status, storedParcel.Status)
 	}
 }
